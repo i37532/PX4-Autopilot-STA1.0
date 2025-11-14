@@ -42,6 +42,9 @@
 #include <px4_platform_common/defines.h>
 #include <geo/geo.h>
 
+#include "ISTA.hpp"
+ISTA _z_controller{10.0f, 6.0f}; // λ₁, λ₂
+
 using namespace matrix;
 
 const trajectory_setpoint_s PositionControl::empty_trajectory_setpoint = {0, {NAN, NAN, NAN}, {NAN, NAN, NAN}, {NAN, NAN, NAN}, {NAN, NAN, NAN}, NAN, NAN};
@@ -87,8 +90,8 @@ void PositionControl::updateHoverThrust(const float hover_thrust_new)
 	_vel_int(2) += (_acc_sp(2) - CONSTANTS_ONE_G) * previous_hover_thrust / _hover_thrust
 		       + CONSTANTS_ONE_G - _acc_sp(2);
 
-	_super_twisting._set_sta_w((_acc_sp(2) - CONSTANTS_ONE_G) * previous_hover_thrust / _hover_thrust
-			+ CONSTANTS_ONE_G - _acc_sp(2));
+	// _super_twisting._set_sta_w((_acc_sp(2) - CONSTANTS_ONE_G) * previous_hover_thrust / _hover_thrust
+	// 		+ CONSTANTS_ONE_G - _acc_sp(2));
 }
 
 void PositionControl::setState(const PositionControlStates &states)
@@ -124,7 +127,25 @@ bool PositionControl::update(const float dt)
 	bool valid = _inputValid();
 
 	if (valid) {
-		_super_twisting._staZPositionControl(dt, _pos, _pos_sp, _vel, _vel_sp, _acc_sp);
+		// _super_twisting._staZPositionControl(dt, _pos, _pos_sp, _vel, _vel_sp, _acc_sp);
+
+		// 使用 ISTA 替代 Super-Twisting 的 Z 位置控制
+		float z_pos_error = 0.0f;
+
+		if (PX4_ISFINITE(_pos_sp(2)) && PX4_ISFINITE(_pos(2))) {
+			z_pos_error = _pos_sp(2) - _pos(2); // 目标 - 当前
+		}
+
+		// 调用 ISTA，得到垂直方向的控制输出（加速度或等效 thrust component）
+		// 注意：你可以调整这里传入的误差或尺度，保证单位一致
+		float ista_z_output = _z_controller.update(z_pos_error, dt);
+
+		// 将 ISTA 的输出注入到加速度 setpoint（替代原来 SuperTwisting 的效果）
+		// 这里我们把 acc_sp(2) 的偏差/修正量交给后续 velocity control 使用
+		// 如果你的 ISTA 返回的是“期望垂直加速度”，直接叠加到 _acc_sp
+		// 也可以用 ista_z_output = -ista_z_output 根据原来 _super_twisting 的符号习惯调整
+		_acc_sp(2) = -ista_z_output;
+
 		_positionControl();
 		_velocityControl(dt);
 
@@ -163,7 +184,11 @@ void PositionControl::_velocityControl(const float dt)
 	Vector3f acc_sp_velocity = vel_error.emult(_gain_vel_p) + _vel_int - _vel_dot.emult(_gain_vel_d);
 
 	// No control input from setpoints or corresponding states which are NAN
-	acc_sp_velocity(2) = -_super_twisting._getStaThrust();
+
+
+	// acc_sp_velocity(2) = -_super_twisting._getStaThrust();
+
+
 	ControlMath::addIfNotNanVector3f(_acc_sp, acc_sp_velocity);
 
 	_accelerationControl();
@@ -286,9 +311,9 @@ void PositionControl::getAttitudeSetpoint(vehicle_attitude_setpoint_s &attitude_
 	attitude_setpoint.yaw_sp_move_rate = _yawspeed_sp;
 }
 
-void PositionControl::_set_sta_param(float sta_sliding_c_new, float sta_z_error_up_new, float sta_ita_norm_up_new)
-{
-	_super_twisting._update_sta_sliding_c(sta_sliding_c_new);
-	_super_twisting._update_sta_sliding_z_error_up(sta_z_error_up_new);
-	_super_twisting._update_sta_ita_norm_up(sta_ita_norm_up_new);
-}
+// void PositionControl::_set_sta_param(float sta_sliding_c_new, float sta_z_error_up_new, float sta_ita_norm_up_new)
+// {
+// 	_super_twisting._update_sta_sliding_c(sta_sliding_c_new);
+// 	_super_twisting._update_sta_sliding_z_error_up(sta_z_error_up_new);
+// 	_super_twisting._update_sta_ita_norm_up(sta_ita_norm_up_new);
+// }

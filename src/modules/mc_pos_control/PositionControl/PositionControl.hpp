@@ -44,7 +44,7 @@
 #include <uORB/topics/trajectory_setpoint.h>
 #include <uORB/topics/vehicle_attitude_setpoint.h>
 #include <uORB/topics/vehicle_local_position_setpoint.h>
-#include <SuperTwisting.hpp>
+
 #include <px4_platform_common/module_params.h>
 #include <uORB/SubscriptionInterval.hpp>
 #include <uORB/topics/parameter_update.h>
@@ -248,7 +248,7 @@ private:
 	// 	(ParamFloat<px4::params::STA_Z_ERROR_UP>) _param_sta_z_error_up  /**< example parameter */
 	// )
 
-	SuperTwisting _super_twisting{};
+
 	// uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
 
 

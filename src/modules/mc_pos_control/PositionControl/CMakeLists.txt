@@ -36,8 +36,8 @@ px4_add_library(PositionControl
 	ControlMath.hpp
 	PositionControl.cpp
 	PositionControl.hpp
-	SuperTwisting.hpp
-	SuperTwisting.cpp
+	ISTA.cpp
+	ISTA.hpp
 )
 target_include_directories(PositionControl PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 

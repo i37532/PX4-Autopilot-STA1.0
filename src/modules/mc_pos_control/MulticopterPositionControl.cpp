@@ -83,7 +83,7 @@ void MulticopterPositionControl::parameters_update(bool force)
 
 		float sample_freq_hz = 1.f / _sample_interval_s.mean();
 
-		_control._set_sta_param(_param_sta_sliding_c.get(), _param_sta_z_error_up.get(), _param_sta_ita_norm_up.get());
+		// _control._set_sta_param(_param_sta_sliding_c.get(), _param_sta_z_error_up.get(), _param_sta_ita_norm_up.get());
 
 		// velocity notch filter
 		if ((_param_mpc_vel_nf_frq.get() > 0.f) && (_param_mpc_vel_nf_bw.get() > 0.f)) {
