@@ -23,7 +23,9 @@ float ISTA::update(float x, float h)
     } else if (fabsf(b) <= h * h * _lambda2) {
         xi = b / (-h * h * _lambda2);
         sqrt_tilde_x = 0.0f;
+        const float nu_max = 3.0f;        // 对应 3 m/s² 的量级
         _nu = -x / h;
+        _nu = fmaxf(fminf(_nu, nu_max), -nu_max);
         u = _nu;
 
     } else {
