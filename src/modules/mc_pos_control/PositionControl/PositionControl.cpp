@@ -44,6 +44,11 @@
 
 #include "ISTA.hpp"
 ISTA _z_controller{10.0f, 6.0f}; // λ₁, λ₂
+// Lambda1 和 Lambda2 需要匹配滑模面动力学
+// 原来: ISTA _z_controller{10.0f, 6.0f};
+// 建议尝试更温和的参数开始调试，或者根据 Super-Twisting 标准公式: L1 = 1.5*sqrt(L2), L2 = 1.1*U_max
+ISTA _z_controller{2.0f, 4.0f}; // 示例值，需调试
+
 
 using namespace matrix;
 
@@ -127,23 +132,34 @@ bool PositionControl::update(const float dt)
 	bool valid = _inputValid();
 
 	if (valid) {
-		// _super_twisting._staZPositionControl(dt, _pos, _pos_sp, _vel, _vel_sp, _acc_sp);
-
-		// 使用 ISTA 替代 Super-Twisting 的 Z 位置控制
+		// 1. 获取 Z 轴位置误差 (Target - Current)
 		float z_pos_error = 0.0f;
-
 		if (PX4_ISFINITE(_pos_sp(2)) && PX4_ISFINITE(_pos(2))) {
-			z_pos_error = _pos_sp(2) - _pos(2); // 目标 - 当前
+			z_pos_error = _pos_sp(2) - _pos(2);
 		}
 
-		// 调用 ISTA，得到垂直方向的控制输出（加速度或等效 thrust component）
-		// 注意：你可以调整这里传入的误差或尺度，保证单位一致
-		float ista_z_output = _z_controller.update(z_pos_error, dt);
+		// 2. 获取 Z 轴速度误差 (Target - Current)
+		// 注意：_vel_sp(2) 通常由 _positionControl() 计算得出，或者你可以直接设为 0 (定高时)
+		// 这里我们先调用 _positionControl() 来计算期望速度 _vel_sp
+		_positionControl();
 
-		// 将 ISTA 的输出注入到加速度 setpoint（替代原来 SuperTwisting 的效果）
-		// 这里我们把 acc_sp(2) 的偏差/修正量交给后续 velocity control 使用
-		// 如果你的 ISTA 返回的是“期望垂直加速度”，直接叠加到 _acc_sp
-		// 也可以用 ista_z_output = -ista_z_output 根据原来 _super_twisting 的符号习惯调整
+		float z_vel_error = 0.0f;
+		if (PX4_ISFINITE(_vel_sp(2)) && PX4_ISFINITE(_vel(2))) {
+			z_vel_error = _vel_sp(2) - _vel(2);
+		}
+
+		// 3. 构建滑模面 s = c * e_pos + e_vel
+		// c (beta) 是滑模面参数，决定了误差收敛的快慢。例如取 2.0 到 5.0 之间
+		float beta = 2.0f;
+		float sliding_surface = beta * z_pos_error + z_vel_error;
+
+		// 4. 调用 ISTA，传入滑模变量 sigma
+		float ista_z_output = _z_controller.update(sliding_surface, dt);
+
+		// 5. 将输出赋值给加速度 setpoint
+		// 注意符号：PX4 NED坐标系下，Z向下为正。
+		// 如果位置低了(error负)，需要向上推力(加速度负)。
+		// 需要根据实际测试调整这个正负号，通常 SuperTwisting 输出 u 用于抵消 dynamics
 		_acc_sp(2) = -ista_z_output;
 
 		_positionControl();
