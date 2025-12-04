@@ -39,6 +39,8 @@
 #include <px4_platform_common/events.h>
 #include "PositionControl/ControlMath.hpp"
 
+#include <uORB/topics/vehicle_status.h>   // 确保有这个头
+
 using namespace matrix;
 
 MulticopterPositionControl::MulticopterPositionControl(bool vtol) :
@@ -379,6 +381,23 @@ PositionControlStates MulticopterPositionControl::set_vehicle_states(const vehic
 
 void MulticopterPositionControl::Run()
 {
+	// === 1) 在 Run 里创建一个静态订阅对象 ===
+	static uORB::Subscription vehicle_status_sub{ORB_ID(vehicle_status)};
+
+	// === 2) 拿一份当前的 vehicle_status ===
+	vehicle_status_s vehicle_status{};
+	vehicle_status_sub.copy(&vehicle_status);
+
+	// === 3) 根据 nav_state 计算是否处于着陆相关模式 ===
+	bool is_landing =
+		(vehicle_status.nav_state == vehicle_status_s::NAVIGATION_STATE_AUTO_LAND) ||
+		(vehicle_status.nav_state == vehicle_status_s::NAVIGATION_STATE_DESCEND)   ||
+		(vehicle_status.nav_state == vehicle_status_s::NAVIGATION_STATE_AUTO_RTL);
+
+	// === 4) 把结果传给 PositionControl ===
+	_control.setLandingMode(is_landing);
+
+
 	if (should_exit()) {
 		_local_pos_sub.unregisterCallback();
 		exit_and_cleanup();

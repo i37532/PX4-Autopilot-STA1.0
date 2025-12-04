@@ -83,6 +83,8 @@ class PositionControl
 {
 public:
 
+	void setLandingMode(bool landing) { _is_landing = landing; };
+
 	PositionControl() = default;
 	~PositionControl() = default;
 
@@ -200,6 +202,8 @@ public:
 	void _set_sta_param(float sta_sliding_c_new, float sta_z_error_up_new, float sta_ita_norm_up_new);
 
 private:
+
+	bool _is_landing{false};
 	// The range limits of the hover thrust configuration/estimate
 	static constexpr float HOVER_THRUST_MIN = 0.05f;
 	static constexpr float HOVER_THRUST_MAX = 0.9f;

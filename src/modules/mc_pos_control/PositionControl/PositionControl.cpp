@@ -43,7 +43,7 @@
 #include <geo/geo.h>
 
 #include "ISTA.hpp"
-ISTA _z_controller{10.0f, 6.0f}; // λ₁, λ₂
+// ISTA _z_controller{10.0f, 6.0f}; // λ₁, λ₂
 // Lambda1 和 Lambda2 需要匹配滑模面动力学
 // 原来: ISTA _z_controller{10.0f, 6.0f};
 // 建议尝试更温和的参数开始调试，或者根据 Super-Twisting 标准公式: L1 = 1.5*sqrt(L2), L2 = 1.1*U_max
@@ -116,63 +116,63 @@ void PositionControl::setInputSetpoint(const trajectory_setpoint_s &setpoint)
 	_yawspeed_sp = setpoint.yawspeed;
 }
 
+
+
 bool PositionControl::update(const float dt)
 {
+    bool valid = _inputValid();
 
-	// if(_parameter_update_sub.updated()){
-	// 	parameter_update_s param_update;
-	// 	_parameter_update_sub.copy(&param_update);
-	// 	updateParams();
-	// 	float sta_sliding_c_tmp = _param_sta_sliding_c.get();
-	// 	float sta_z_error_pos_up = _param_sta_z_error_up.get();
-	// 	_super_twisting._update_sta_sliding_c(sta_sliding_c_tmp);
-	// 	_super_twisting._update_sta_sliding_z_error_up(sta_z_error_pos_up);
-	// }
+    if (!valid) {
+        return false;
+    }
 
-	bool valid = _inputValid();
+    // 1) 先用位置环根据 pos_sp 算出 vel_sp（原版逻辑）
+    _positionControl();
 
-	if (valid) {
-		// 1. 获取 Z 轴位置误差 (Target - Current)
-		float z_pos_error = 0.0f;
-		if (PX4_ISFINITE(_pos_sp(2)) && PX4_ISFINITE(_pos(2))) {
-			z_pos_error = _pos_sp(2) - _pos(2);
-		}
+    // 2) 非 LAND 模式：用 ISTA 给 Z 轴加一个前馈加速度
+    if (!_is_landing) {
+        // Z 轴位置误差
+        float z_pos_error = 0.0f;
+        if (PX4_ISFINITE(_pos_sp(2)) && PX4_ISFINITE(_pos(2))) {
+            z_pos_error = _pos_sp(2) - _pos(2);
+        }
 
-		// 2. 获取 Z 轴速度误差 (Target - Current)
-		// 注意：_vel_sp(2) 通常由 _positionControl() 计算得出，或者你可以直接设为 0 (定高时)
-		// 这里我们先调用 _positionControl() 来计算期望速度 _vel_sp
-		_positionControl();
+        // Z 轴速度误差（_vel_sp 由 _positionControl() 算出，或由 flight task 直接给）
+        float z_vel_error = 0.0f;
+        if (PX4_ISFINITE(_vel_sp(2)) && PX4_ISFINITE(_vel(2))) {
+            z_vel_error = _vel_sp(2) - _vel(2);
+        }
 
-		float z_vel_error = 0.0f;
-		if (PX4_ISFINITE(_vel_sp(2)) && PX4_ISFINITE(_vel(2))) {
-			z_vel_error = _vel_sp(2) - _vel(2);
-		}
+        const float beta = 2.0f;
+        const float sliding_surface = beta * z_pos_error + z_vel_error;
 
-		// 3. 构建滑模面 s = c * e_pos + e_vel
-		// c (beta) 是滑模面参数，决定了误差收敛的快慢。例如取 2.0 到 5.0 之间
-		float beta = 2.0f;
-		float sliding_surface = beta * z_pos_error + z_vel_error;
+        // ISTA 输出（可以理解为“额外的Z加速度”）
+        const float ista_z_output = _z_controller.update(sliding_surface, dt);
 
-		// 4. 调用 ISTA，传入滑模变量 sigma
-		float ista_z_output = _z_controller.update(sliding_surface, dt);
+        // 作为前馈加速度放进 Z 轴（NED：向下为正）
+        _acc_sp(2) = -ista_z_output;
 
-		// 5. 将输出赋值给加速度 setpoint
-		// 注意符号：PX4 NED坐标系下，Z向下为正。
-		// 如果位置低了(error负)，需要向上推力(加速度负)。
-		// 需要根据实际测试调整这个正负号，通常 SuperTwisting 输出 u 用于抵消 dynamics
-		_acc_sp(2) = -ista_z_output;
+    } else {
+        // LAND 模式：完全不用 ISTA，只用原生控制
+        // 如果 ISTA 有 reset，可以在这里清状态，防止下次起飞带偏差
+        // _z_controller.reset();
+    }
 
-		_positionControl();
-		_velocityControl(dt);
+    // 3) 统一调用原版的速度控制器（XYZ 都会处理）
+    _velocityControl(dt);
 
+    // 4) Yaw 部分保持安全处理
+    _yawspeed_sp = PX4_ISFINITE(_yawspeed_sp) ? _yawspeed_sp : 0.f;
+    _yaw_sp      = PX4_ISFINITE(_yaw_sp) ? _yaw_sp : _yaw;
 
-		_yawspeed_sp = PX4_ISFINITE(_yawspeed_sp) ? _yawspeed_sp : 0.f;
-		_yaw_sp = PX4_ISFINITE(_yaw_sp) ? _yaw_sp : _yaw; // TODO: better way to disable yaw control
-	}
-
-	// There has to be a valid output acceleration and thrust setpoint otherwise something went wrong
-	return valid && _acc_sp.isAllFinite() && _thr_sp.isAllFinite();
+    // 5) 确保输出有限
+    return _acc_sp.isAllFinite() && _thr_sp.isAllFinite();
 }
+
+
+
+
+
 
 void PositionControl::_positionControl()
 {
