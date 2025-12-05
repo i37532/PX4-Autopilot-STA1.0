@@ -47,7 +47,12 @@
 // Lambda1 和 Lambda2 需要匹配滑模面动力学
 // 原来: ISTA _z_controller{10.0f, 6.0f};
 // 建议尝试更温和的参数开始调试，或者根据 Super-Twisting 标准公式: L1 = 1.5*sqrt(L2), L2 = 1.1*U_max
-ISTA _z_controller{2.0f, 4.0f}; // 示例值，需调试
+
+
+// 改成：
+ISTA _x_controller{2.0f, 4.0f};   // 参数先和 Z 一样，后面慢慢调
+ISTA _y_controller{2.0f, 4.0f};
+ISTA _z_controller{2.0f, 4.0f};
 
 
 using namespace matrix;
@@ -118,56 +123,115 @@ void PositionControl::setInputSetpoint(const trajectory_setpoint_s &setpoint)
 
 
 
+
 bool PositionControl::update(const float dt)
 {
-    bool valid = _inputValid();
-
-    if (!valid) {
+    if (!_inputValid()) {
         return false;
     }
 
-    // 1) 先用位置环根据 pos_sp 算出 vel_sp（原版逻辑）
+    // 1) 原生位置环
     _positionControl();
 
-    // 2) 非 LAND 模式：用 ISTA 给 Z 轴加一个前馈加速度
-    if (!_is_landing) {
-        // Z 轴位置误差
-        float z_pos_error = 0.0f;
-        if (PX4_ISFINITE(_pos_sp(2)) && PX4_ISFINITE(_pos(2))) {
-            z_pos_error = _pos_sp(2) - _pos(2);
-        }
 
-        // Z 轴速度误差（_vel_sp 由 _positionControl() 算出，或由 flight task 直接给）
-        float z_vel_error = 0.0f;
-        if (PX4_ISFINITE(_vel_sp(2)) && PX4_ISFINITE(_vel(2))) {
-            z_vel_error = _vel_sp(2) - _vel(2);
-        }
+// 2) 非 LAND 模式：用 ISTA 给 Z 轴加一个“有限的前馈加速度”
+if (!_is_landing) {
 
-        const float beta = 2.0f;
-        const float sliding_surface = beta * z_pos_error + z_vel_error;
+	// 注意：这里我建议改成 pos - pos_sp，这样“在目标高度以下”误差为正，便于调试符号
+	float z_pos_error = 0.0f;
+	if (PX4_ISFINITE(_pos_sp(2)) && PX4_ISFINITE(_pos(2))) {
+		z_pos_error = _pos(2) - _pos_sp(2);   // 改：原来是 _pos_sp(2) - _pos(2)
+	}
 
-        // ISTA 输出（可以理解为“额外的Z加速度”）
-        const float ista_z_output = _z_controller.update(sliding_surface, dt);
+	float z_vel_error = 0.0f;
+	if (PX4_ISFINITE(_vel_sp(2)) && PX4_ISFINITE(_vel(2))) {
+		z_vel_error = _vel(2) - _vel_sp(2);   // 同理，建议也统一成状态 - 期望
+	}
 
-        // 作为前馈加速度放进 Z 轴（NED：向下为正）
-        _acc_sp(2) = -ista_z_output;
+	const float beta = 2.0f;
+	const float sliding_surface = beta * z_pos_error + z_vel_error;
 
-    } else {
-        // LAND 模式：完全不用 ISTA，只用原生控制
-        // 如果 ISTA 有 reset，可以在这里清状态，防止下次起飞带偏差
-        // _z_controller.reset();
-    }
+	// 1) 先算 ISTA 输出
+	float ista_z_output = _z_controller.update(sliding_surface, dt);
 
-    // 3) 统一调用原版的速度控制器（XYZ 都会处理）
+	// 2) 做一个幅值限幅，避免一下子把 thrust 拉满
+	const float ista_limit = 1.0f;        // 先从 ±2 m/s^2 这种比较小的值开始
+	ista_z_output = math::constrain(ista_z_output, -ista_limit, ista_limit);
+
+	// 3) 作为一个“微调项”叠加到 Z 加速度上，而不是完全覆盖
+	//    注意：这里先不要加负号，保持最直观的关系
+	_acc_sp(2) += ista_z_output;
+
+
+
+
+
+// --- X 轴 ISTA：先只改速度期望，不直接改加速度 ---
+
+float x_pos_error = 0.0f;
+if (PX4_ISFINITE(_pos_sp(0)) && PX4_ISFINITE(_pos(0))) {
+    x_pos_error = _pos(0) - _pos_sp(0);     // 和 Z 轴一样，用 “状态 - 期望”
+}
+
+float x_vel_error = 0.0f;
+if (PX4_ISFINITE(_vel_sp(0)) && PX4_ISFINITE(_vel(0))) {
+    x_vel_error = _vel(0) - _vel_sp(0);
+}
+
+// 构造 X 轴的滑模面
+const float beta_xy = 1.0f;
+const float s_x = beta_xy * x_pos_error + x_vel_error;
+
+// ISTA 输出，这里我们把它当成“额外的速度修正量”
+float ista_x_vel = _x_controller.update(-s_x, dt);
+
+// 给一个比较小的限幅，避免速度指令乱跳
+const float ista_vel_limit_xy = 0.15f;   // 单位 m/s，先从 ±0.3 开始试
+ista_x_vel = math::constrain(ista_x_vel, -ista_vel_limit_xy, ista_vel_limit_xy);
+
+// 叠加到速度期望，而不是加速度期望
+_vel_sp(0) += ista_x_vel;
+
+
+
+
+// Y 轴误差
+float y_pos_error = 0.0f;
+if (PX4_ISFINITE(_pos_sp(1)) && PX4_ISFINITE(_pos(1))) {
+    y_pos_error = _pos(1) - _pos_sp(1);
+}
+
+float y_vel_error = 0.0f;
+if (PX4_ISFINITE(_vel_sp(1)) && PX4_ISFINITE(_vel(1))) {
+    y_vel_error = _vel(1) - _vel_sp(1);
+}
+
+const float s_y = beta_xy * y_pos_error + y_vel_error;
+float ista_y_vel = _y_controller.update(-s_y, dt);
+ista_y_vel = math::constrain(ista_y_vel, -ista_vel_limit_xy, ista_vel_limit_xy);
+_vel_sp(1) += ista_y_vel;
+
+
+
+} else {
+// LAND 模式：完全不用 ISTA
+// 如果你在 ISTA 里加了 reset，这里可以清一下内部状态
+// _z_controller.reset();
+}
+
+
+
+
+    // 4) 速度环（原生）
     _velocityControl(dt);
 
-    // 4) Yaw 部分保持安全处理
+    // 5) yaw/sp 处理 & 输出检查
     _yawspeed_sp = PX4_ISFINITE(_yawspeed_sp) ? _yawspeed_sp : 0.f;
     _yaw_sp      = PX4_ISFINITE(_yaw_sp) ? _yaw_sp : _yaw;
 
-    // 5) 确保输出有限
     return _acc_sp.isAllFinite() && _thr_sp.isAllFinite();
 }
+
 
 
 
