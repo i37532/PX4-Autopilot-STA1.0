@@ -50,6 +50,9 @@
 #include <uORB/topics/parameter_update.h>
 #include <iostream>
 
+#include "ISTA.hpp"
+
+
 
 
 struct PositionControlStates {
@@ -200,7 +203,19 @@ public:
 	// void _set_sta_param(float sta_sliding_c_new, float sta_z_error_up_new, float sta_ita_norm_up_new);
 	PositionStaControl _pos_sta_control;
 
+	void setPosStaParams(float mass, float c, float lambda1, float lambda2);
+
+
 private:
+
+	float _mass{1.0f};
+	float _c{1.0f};
+
+   	ISTA _ista_z{1.0f, 2.0f};
+
+	float _u_z{0.0f};           // ISTA 输出，对应加速度或“等效推力”
+
+
 	// The range limits of the hover thrust configuration/estimate
 	static constexpr float HOVER_THRUST_MIN = 0.05f;
 	static constexpr float HOVER_THRUST_MAX = 0.9f;

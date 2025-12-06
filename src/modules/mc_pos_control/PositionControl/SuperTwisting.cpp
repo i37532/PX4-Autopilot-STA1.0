@@ -65,24 +65,28 @@ void SuperTwisting::_staZPositionControl(const float dt, matrix::Vector3f& _pos,
 		ita_norm = fabs(ita);
 	}
 
-	_sta_thrust = _sta_sliding_c *(_vel(2) - _vel_sp(2)) + _sta_lamada * ita / sqrt(ita_norm) + _sta_w  - _acc_sp(2) ;
-
-	if(!PX4_ISFINITE(_sta_thrust))_sta_thrust = 0;
 
 
+	// ====== 使用隐式 supertwisting（ISTA） ======
 
+	// 1）ISTA 的输入是滑模面 ita，步长是 dt
+	const float u_sta = _ista_z.update(ita_norm, dt);
 
-	if(fabs(_sta_thrust) > _sta_UM){
-		_sta_w_dot = _sta_thrust;
-	}else{
-		_sta_w_dot = _sta_alpha * ita / ita_norm;
+	// 2）把 ISTA 的输出 u_sta 当成 supertwisting 非线性项
+	//    原来控制律是：c * ev + λ * |s|^{1/2}sign(s) + w - acc_sp
+	//    现在：c * ev + u_sta - acc_sp
+	_sta_thrust = _sta_sliding_c * (_vel(2) - _vel_sp(2))
+			+ u_sta
+			- _acc_sp(2);
+
+	if (!PX4_ISFINITE(_sta_thrust)) {
+		_sta_thrust = 0.0f;
 	}
 
-	if(!PX4_ISFINITE(_sta_w_dot))_sta_w_dot = 0;
+	// 3）隐式形式内部已经有“积分状态” _nu，不再需要外部的 _sta_w / _sta_w_dot
+	_sta_w     = 0.0f;
+	_sta_w_dot = 0.0f;
 
-	_sta_w += _sta_w_dot * dt;
-
-	_sta_w = math::constrain(_sta_w, -CONSTANTS_ONE_G, CONSTANTS_ONE_G);
 
 
 	//publish
@@ -107,9 +111,19 @@ float SuperTwisting::_getStaThrust()
 	return this->_sta_thrust;
 }
 
-void SuperTwisting::_set_sta_w(float less_num){
-	_sta_w -= less_num;
+// void SuperTwisting::_set_sta_w(float less_num){
+// 	_sta_w -= less_num;
+// }
+
+void SuperTwisting::_set_sta_w(float less_num)
+{
+    (void)less_num;   // 避免未使用警告，可以删掉形参也行
+
+    _ista_z.reset();  // 把隐式 supertwisting 的内部积分 ν 清零
+    _sta_w     = 0.0f;
+    _sta_w_dot = 0.0f;
 }
+
 
 void SuperTwisting::_update_sta_sliding_c(float new_value)
 {
