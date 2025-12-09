@@ -89,6 +89,9 @@ private:
 	matrix::Vector2f _pos_xy_sta_norm_max;
 	matrix::Vector2f _pos_xy_sta_norm_min;
 
+	float calculateIsta(float sigma, float dt, float alpha, float lambda, float &integral_state);
+
+
 
 
 };
