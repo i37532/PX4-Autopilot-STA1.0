@@ -1,76 +1,88 @@
 #include "PositionStaControl.hpp"
+#include <math.h>
 
-/**
- * 位置稳定控制主函数，用于计算竖直方向上的推力命令
- */
 float PositionStaControl::update(const float dt, matrix::Vector3f& _pos, matrix::Vector3f& _pos_sp,
 	matrix::Vector3f& _vel, matrix::Vector3f& _vel_sp, matrix::Vector3f& _acc_sp)
 {
-	// 计算中间变量 _pos_ita：结合了位置和速度误差
-	_pos_ita = _vel_sp(2) - _vel(2) + _pos_sta_c * (_pos_sp(2) - _pos(2));
+	// ==========================================
+	// 1. 定义 ISTA 参数
+	// ==========================================
+	// 适当降低增益以防止过冲，如果响应太慢可调大
+	const float _lambda1 = 4.0f;
+	const float _lambda2 = 3.0f;
+	const float tol = 1e-12f;
 
-	// 检查数值是否有效（非NaN、非Inf），否则清零
+	// ==========================================
+	// 2. 计算滑模面 x (修正方向)
+	// ==========================================
+	// 【关键修改】PX4 Z轴向下为正。
+	// 改为 (实际值 - 期望值)。
+	// 例如：掉高时，Vel(正) > Vel_Sp(0)，误差为正 -> ISTA输出负(向上加速) -> 修正成功。
+	_pos_ita = (_vel(2) - _vel_sp(2)) + _pos_sta_c * (_pos(2) - _pos_sp(2));
+
 	if(!PX4_ISFINITE(_pos_ita)) {
 		_pos_ita = 0.f;
 	}
 
-	// 获取 _pos_ita 的范数（绝对值）并限制其大小
-	float pos_sta_ita_norm;
-	pos_sta_ita_norm = math::constrain(fabs(_pos_ita), _pos_sta_norm_min, _pos_sta_norm_max);
+	float x = _pos_ita;
+	float h = dt;
 
-	// 计算 _pos_ita 的符号
-	float pos_sta_ita_sign;
-	pos_sta_ita_sign = _pos_ita / pos_sta_ita_norm;
+	// ==========================================
+	// 3. 执行 ISTA 算法 (保持不变)
+	// ==========================================
+	float b = -x - h * _pos_sta_w;
+	float a = h * _lambda1;
 
-	// 计算推力命令（竖直方向）
-	_pos_thrust = -_mc_mass * _acc_sp(2)                                    // 期望加速度反馈（负值用于 Z 轴朝上）
-				+ _mc_mass * _pos_sta_c * (_vel(2) - _vel_sp(2))            // 速度误差
-				+ _pos_sta_alpha * sqrt(pos_sta_ita_norm) * pos_sta_ita_sign // STA非线性项
-				+ _pos_sta_w;                                                // 积分 w
+	float u_ista = 0.0f;
+	float sqrt_tilde_x = 0.0f;
+	float xi = 0.0f;
+	float disc = 0.0f;
 
-	// 计算扰动补偿项的微分（w_dot）
-	_pos_sta_w_dot = _pos_sta_lamada * pos_sta_ita_sign;
+	if (b < -h * h * _lambda2) {
+		xi = 1.0f;
+		disc = a * a - 4.0f * (b + _lambda2 * h * h);
+		if (disc < -tol) disc = 0.0f;
+		sqrt_tilde_x = (-a + sqrtf(fmaxf(disc, 0.0f))) / 2.0f;
+		sqrt_tilde_x = fmaxf(sqrt_tilde_x, 0.0f);
+
+		_pos_sta_w -= h * _lambda2 * xi;
+		u_ista = -_lambda1 * sqrt_tilde_x * xi + _pos_sta_w;
+
+	} else if (fabsf(b) <= h * h * _lambda2) {
+		xi = b / (-h * h * _lambda2);
+		sqrt_tilde_x = 0.0f;
+
+		_pos_sta_w = -x / h;
+		u_ista = _pos_sta_w;
+
+	} else {
+		xi = -1.0f;
+		disc = a * a + 4.0f * (b - _lambda2 * h * h);
+		if (disc < -tol) disc = 0.0f;
+		sqrt_tilde_x = (-a + sqrtf(fmaxf(disc, 0.0f))) / 2.0f;
+		sqrt_tilde_x = fmaxf(sqrt_tilde_x, 0.0f);
+
+		_pos_sta_w += h * _lambda2;
+		u_ista = _lambda1 * sqrt_tilde_x + _pos_sta_w;
+	}
+
+	// 限制积分项，防止离地前积分过大导致起飞跳变
+	_pos_sta_w = math::constrain(_pos_sta_w, -5.0f, 5.0f);
+
+	// ==========================================
+	// 4. 计算最终输出 (修正单位和逻辑)
+	// ==========================================
+	// 【关键修改】
+	// 1. 去掉 _mc_mass 乘法。因为 PositionControl 需要的是加速度(m/s^2)，不是力(N)。
+	// 2. 去掉 -_acc_sp(2)。只需要返回“修正量”，PositionControl 会自动把它加到前馈上。
+
+	_pos_thrust = u_ista;
 
 	return _pos_thrust;
 }
 
-/**
- * 更新扰动补偿项 w 的积分值，并进行限制
- */
 void PositionStaControl::updateIntW(float thr_z_sp, float lim_thr_min, float lim_thr_max, const float dt)
 {
-	// 检查微分项有效性
-	if(!PX4_ISFINITE(_pos_sta_w_dot)) _pos_sta_w_dot = 0.f;
-
-	// 如果已经达到推力限制边界，且积分方向会导致饱和加剧，则停止积分
-	if((thr_z_sp >= -lim_thr_min && _pos_ita >= 0)
-		||(thr_z_sp <= -lim_thr_max && _pos_ita <= 0))
-	{
-		_pos_sta_w_dot = 0.f;
-	}
-
-	// 积分更新
-	_pos_sta_w += _pos_sta_w_dot * dt;
-
-	// 检查积分项有效性
-	if(!PX4_ISFINITE(_pos_sta_w)) _pos_sta_w = 0.f;
-
-	// 限制积分项的大小，避免积分饱和
-	_pos_sta_w = math::constrain(_pos_sta_w, -_pos_sta_w_limit, _pos_sta_w_limit);
-}
-
-/**
- * 计算归一化的速度误差（限幅后除以模长），用于 STA 控制器的 x、y轴
- */
-float PositionStaControl::getVelErrorDivNorm(float vel_error, size_t axis)
-{
-	// 仅处理 x 或 y 轴
-	if(axis >= 2) return 0.f;
-
-	// 获取速度误差的绝对值，并进行限幅
-	float vel_error_norm = fabs(vel_error);
-	vel_error_norm = math::constrain(vel_error_norm, _pos_xy_sta_norm_min(axis), _pos_xy_sta_norm_max(axis));
-
-	// 返回归一化后的速度误差
-	return vel_error / vel_error_norm;
+	// 仅做简单的抗饱和限制
+	_pos_sta_w = math::constrain(_pos_sta_w, -5.0f, 5.0f);
 }

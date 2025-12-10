@@ -153,14 +153,20 @@ void PositionControl::_velocityControl(const float dt)
 	Vector3f vel_error = _vel_sp - _vel;
 
 	//modify vel error
-	vel_error(0) = _pos_sta_control.getVelErrorDivNorm(vel_error(0), 0);
-	vel_error(1) = _pos_sta_control.getVelErrorDivNorm(vel_error(1), 1);
+	// vel_error(0) = _pos_sta_control.getVelErrorDivNorm(vel_error(0), 0);
+	// vel_error(1) = _pos_sta_control.getVelErrorDivNorm(vel_error(1), 1);
 
 
 	Vector3f acc_sp_velocity = vel_error.emult(_gain_vel_p) + _vel_int - _vel_dot.emult(_gain_vel_d);
 
 	// No control input from setpoints or corresponding states which are NAN
 	// acc_sp_velocity(2) =  _pos_sta_control.getPosStaThrust();
+
+
+	// ================= 修改开始 =================
+	// 取消注释下面这行，将 Z 轴加速度设定值强制替换为 ISTA 的输出
+	acc_sp_velocity(2) = _pos_sta_control.getPosStaThrust();
+	// ================= 修改结束 =================
 	ControlMath::addIfNotNanVector3f(_acc_sp, acc_sp_velocity);
 
 	_accelerationControl();
