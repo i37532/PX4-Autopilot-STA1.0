@@ -96,4 +96,8 @@ The PX4 Autopilot project including all of its trademarks is hosted under [Drone
 - **抖动/左右摆**：优先减小 `MPC_ISTA_L1_XY`、`MPC_ISTA_L2_XY`（例如各减半），保持 `MPC_ISTA_KEEP_D=1`。
 - **轻微漂移**：增大 `MPC_ISTA_HOV_DB`（例如 0.05→0.08）或减小 `MPC_ISTA_HOV_TC`（例如 0.5→0.3）。
 - **高频抖动/啸叫**：小幅增大 `MPC_ISTA_EPS`（例如 0.005→0.02），过大会引入迟滞和偏移。
-- **Z 轴跟随慢/抖**：小幅调整 `MPC_ISTA_L1_Z`、`MPC_ISTA_L2_Z`，幅度不宜过大。
+- **Z 轴跟随慢/抖**：小幅调整 `MPC_ISTA_L1_Z`、`MPC_ISTA_L2_Z`，幅度不宜过大。\\
+---
+- 漂移：低频/直流偏置，位置单向慢慢走，速度均值不为 0（不怎么过零），随时间累计偏移。
+- 抖动/左右摆：低频周期性摆动（典型 0.3–2 Hz），位置/速度围绕 0 往返，频繁过零，均值接近 0。
+- 高频抖动/啸叫：高频小幅抖（>5–10 Hz），位置变化不大但速度/加速度/推力快速抖动，肉眼像“震”。
