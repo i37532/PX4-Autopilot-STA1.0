@@ -147,3 +147,17 @@ PARAM_DEFINE_FLOAT(MPC_ISTA_HOV_DB, 0.05f);
  * @group Multicopter Position Control
  */
 PARAM_DEFINE_FLOAT(MPC_ISTA_HOV_TC, 0.5f);
+
+/**
+ * ISTA boundary layer width (smooth sign)
+ *
+ * Replaces hard switching with a smoothed transition around zero to reduce chattering.
+ * Set to 0 to disable smoothing.
+ *
+ * @min 0.0
+ * @max 1.0
+ * @decimal 3
+ * @increment 0.01
+ * @group Multicopter Position Control
+ */
+PARAM_DEFINE_FLOAT(MPC_ISTA_EPS, 0.05f);

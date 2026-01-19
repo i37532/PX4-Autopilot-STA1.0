@@ -175,10 +175,11 @@ public:
 	 * @param keep_d true to keep D-term when using ISTA
 	 * @param hover_vel_db XY hover velocity deadband (m/s)
 	 * @param hover_nu_tc XY nu decay time constant in hover (s)
+	 * @param epsilon boundary layer width for smooth sign (m/s)
 	 */
 	void setIstaParams(bool enabled, float lambda1_xy, float lambda2_xy,
 			   float lambda1_z, float lambda2_z, bool keep_d,
-			   float hover_vel_db, float hover_nu_tc);
+			   float hover_vel_db, float hover_nu_tc, float epsilon);
 
 	/**
 	 * Reset ISTA internal states (nu) to zero

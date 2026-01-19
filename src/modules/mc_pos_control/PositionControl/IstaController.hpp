@@ -73,6 +73,13 @@ public:
 	void setGains(float lambda1, float lambda2);
 
 	/**
+	 * @brief Set boundary layer width for smooth sign (0 disables smoothing)
+	 *
+	 * @param epsilon boundary layer width (units: same as x, m/s)
+	 */
+	void setEpsilon(float epsilon);
+
+	/**
 	 * @brief Reset internal state (nu) to zero
 	 *
 	 * Call on disarm, mode change, or when PID integrator is reset.
@@ -111,6 +118,7 @@ public:
 private:
 	float _lambda1{1.0f};   ///< ISTA gain lambda1 (proportional-like)
 	float _lambda2{1.0f};   ///< ISTA gain lambda2 (integral-like)
+	float _epsilon{0.0f};   ///< Boundary layer width for smooth sign
 	float _nu{0.0f};        ///< Internal controller state (persistent)
 	int _last_case{0};      ///< Last executed case (1, 2, or 3) for debug
 };

@@ -355,7 +355,7 @@ void PositionControl::getAttitudeSetpoint(vehicle_attitude_setpoint_s &attitude_
 
 void PositionControl::setIstaParams(bool enabled, float lambda1_xy, float lambda2_xy,
 				    float lambda1_z, float lambda2_z, bool keep_d,
-				    float hover_vel_db, float hover_nu_tc)
+				    float hover_vel_db, float hover_nu_tc, float epsilon)
 {
 	_ista_enabled = enabled;
 	_ista_keep_d = keep_d;
@@ -365,6 +365,9 @@ void PositionControl::setIstaParams(bool enabled, float lambda1_xy, float lambda
 	_ista_x.setGains(lambda1_xy, lambda2_xy);
 	_ista_y.setGains(lambda1_xy, lambda2_xy);
 	_ista_z.setGains(lambda1_z, lambda2_z);
+	_ista_x.setEpsilon(epsilon);
+	_ista_y.setEpsilon(epsilon);
+	_ista_z.setEpsilon(epsilon);
 }
 
 void PositionControl::resetIsta()
