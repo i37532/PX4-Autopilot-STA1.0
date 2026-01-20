@@ -68,18 +68,50 @@ void RateControl::setNegativeSaturationFlag(size_t axis, bool is_saturated)
 	}
 }
 
+void RateControl::setIstaEnabled(bool enabled)
+{
+	if (_ista_enabled != enabled) {
+		_rate_int.zero();
+		_ista_enabled = enabled;
+	}
+}
+
 Vector3f RateControl::update(const Vector3f &rate, const Vector3f &rate_sp, const Vector3f &angular_accel,
 			     const float dt, const bool landed)
 {
+	if (!PX4_ISFINITE(dt) || dt <= 0.f) {
+		return Vector3f();
+	}
+
 	// angular rates error
 	Vector3f rate_error = rate_sp - rate;
 
-	// PID control with feed forward
-	const Vector3f torque = _gain_p.emult(rate_error) + _rate_int - _gain_d.emult(angular_accel) + _gain_ff.emult(rate_sp);
+	Vector3f torque = -_gain_d.emult(angular_accel) + _gain_ff.emult(rate_sp);
 
-	// update integral only if we are not landed
-	if (!landed) {
-		updateIntegral(rate_error, dt);
+	if (_ista_enabled) {
+		for (int i = 0; i < 3; i++) {
+			const bool saturated_positive = _control_allocator_saturation_positive(i);
+			const bool saturated_negative = _control_allocator_saturation_negative(i);
+			const bool inhibit_update = (saturated_positive && rate_error(i) > 0.f)
+						    || (saturated_negative && rate_error(i) < 0.f);
+			const bool update_state = !landed && !inhibit_update;
+
+			const float u = updateIstaAxis(-rate_error(i), dt, _gain_p(i), _gain_i(i), _rate_int(i), update_state);
+
+			if (update_state) {
+				_rate_int(i) = math::constrain(_rate_int(i), -_lim_int(i), _lim_int(i));
+			}
+
+			torque(i) += u;
+		}
+
+	} else {
+		torque += _gain_p.emult(rate_error) + _rate_int;
+
+		// update integral only if we are not landed
+		if (!landed) {
+			updateIntegral(rate_error, dt);
+		}
 	}
 
 	return torque;
@@ -115,6 +147,76 @@ void RateControl::updateIntegral(Vector3f &rate_error, const float dt)
 			_rate_int(i) = math::constrain(rate_i, -_lim_int(i), _lim_int(i));
 		}
 	}
+}
+
+float RateControl::updateIstaAxis(const float x, const float h, const float lambda1, const float lambda2,
+				  float &nu, const bool update_state)
+{
+	if (!PX4_ISFINITE(x) || !PX4_ISFINITE(h) || h <= 0.f) {
+		return 0.f;
+	}
+
+	const float lambda1_safe = math::max(lambda1, 0.f);
+	const float lambda2_safe = math::max(lambda2, 0.f);
+
+	if (lambda1_safe <= 0.f && lambda2_safe <= 0.f) {
+		if (update_state) {
+			nu = 0.f;
+		}
+		return 0.f;
+	}
+
+	const float a = h * lambda1_safe;
+	const float b_k = -x - h * nu;
+	const float h2_lambda2 = h * h * lambda2_safe;
+
+	float u = 0.f;
+
+	if (b_k < -h2_lambda2) {
+		const float discriminant = a * a - 4.f * (b_k + h2_lambda2);
+		const float sqrt_disc = (discriminant > 0.f) ? sqrtf(discriminant) : 0.f;
+		const float sqrt_x_tilde = (-a + sqrt_disc) * 0.5f;
+		const float sqrt_x_tilde_safe = (sqrt_x_tilde > 0.f) ? sqrt_x_tilde : 0.f;
+
+		const float nu_next = update_state ? (nu - h * lambda2_safe) : nu;
+		if (update_state) {
+			nu = nu_next;
+		}
+
+		u = -lambda1_safe * sqrt_x_tilde_safe + nu_next;
+
+	} else if (b_k > h2_lambda2) {
+		const float discriminant = a * a + 4.f * (b_k - h2_lambda2);
+		const float sqrt_disc = (discriminant > 0.f) ? sqrtf(discriminant) : 0.f;
+		const float sqrt_x_tilde = (-a + sqrt_disc) * 0.5f;
+		const float sqrt_x_tilde_safe = (sqrt_x_tilde > 0.f) ? sqrt_x_tilde : 0.f;
+
+		const float nu_next = update_state ? (nu + h * lambda2_safe) : nu;
+		if (update_state) {
+			nu = nu_next;
+		}
+
+		u = lambda1_safe * sqrt_x_tilde_safe + nu_next;
+
+	} else {
+		u = -x / h;
+		if (update_state) {
+			nu = u;
+		}
+	}
+
+	if (!PX4_ISFINITE(u)) {
+		u = 0.f;
+		if (update_state) {
+			nu = 0.f;
+		}
+	}
+
+	if (update_state && !PX4_ISFINITE(nu)) {
+		nu = 0.f;
+	}
+
+	return u;
 }
 
 void RateControl::getRateControlStatus(rate_ctrl_status_s &rate_ctrl_status)

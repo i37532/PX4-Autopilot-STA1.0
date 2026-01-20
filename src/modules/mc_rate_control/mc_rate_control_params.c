@@ -38,6 +38,17 @@
  */
 
 /**
+ * Enable ISTA angular rate control
+ *
+ * Replace PID P+I with ISTA in the rate controller. D-term and feed-forward remain.
+ * 0 = PID, 1 = ISTA.
+ *
+ * @boolean
+ * @group Multicopter Rate Control
+ */
+PARAM_DEFINE_INT32(MC_RATE_ISTA_EN, 0);
+
+/**
  * Roll rate P gain
  *
  * Roll rate proportional gain, i.e. control output for angular speed error 1 rad/s.

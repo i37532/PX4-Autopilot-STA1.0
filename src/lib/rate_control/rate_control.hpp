@@ -34,7 +34,7 @@
 /**
  * @file rate_control.hpp
  *
- * PID 3 axis angular rate / angular velocity control.
+ * PID or ISTA-based 3 axis angular rate / angular velocity control with D-term and feed-forward.
  */
 
 #pragma once
@@ -97,6 +97,11 @@ public:
 				const matrix::Vector3f &angular_accel, const float dt, const bool landed);
 
 	/**
+	 * Enable ISTA control (replaces P+I path) when true, otherwise use PID.
+	 */
+	void setIstaEnabled(bool enabled);
+
+	/**
 	 * Set the integral term to 0 to prevent windup
 	 * @see _rate_int
 	 */
@@ -122,6 +127,8 @@ public:
 
 private:
 	void updateIntegral(matrix::Vector3f &rate_error, const float dt);
+	float updateIstaAxis(const float x, const float h, const float lambda1, const float lambda2,
+			     float &nu, const bool update_state);
 
 	// Gains
 	matrix::Vector3f _gain_p; ///< rate control proportional gain for all axes x, y, z
@@ -131,7 +138,8 @@ private:
 	matrix::Vector3f _gain_ff; ///< direct rate to torque feed forward gain only useful for helicopters
 
 	// States
-	matrix::Vector3f _rate_int; ///< integral term of the rate controller
+	matrix::Vector3f _rate_int; ///< PID integral term or ISTA internal state (nu)
+	bool _ista_enabled{false};
 
 	// Feedback from control allocation
 	matrix::Vector<bool, 3> _control_allocator_saturation_negative;
