@@ -134,6 +134,7 @@ private:
 
 	DEFINE_PARAMETERS(
 		(ParamInt<px4::params::MC_RATE_ISTA_EN>) _param_mc_rate_ista_en,
+		(ParamFloat<px4::params::MC_RATE_ISTA_EPS>) _param_mc_rate_ista_eps,
 		(ParamFloat<px4::params::MC_ROLLRATE_P>) _param_mc_rollrate_p,
 		(ParamFloat<px4::params::MC_ROLLRATE_I>) _param_mc_rollrate_i,
 		(ParamFloat<px4::params::MC_RR_INT_LIM>) _param_mc_rr_int_lim,

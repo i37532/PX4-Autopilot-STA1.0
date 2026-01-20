@@ -76,6 +76,11 @@ void RateControl::setIstaEnabled(bool enabled)
 	}
 }
 
+void RateControl::setIstaEpsilon(float epsilon)
+{
+	_ista_epsilon = math::max(epsilon, 0.f);
+}
+
 Vector3f RateControl::update(const Vector3f &rate, const Vector3f &rate_sp, const Vector3f &angular_accel,
 			     const float dt, const bool landed)
 {
@@ -156,6 +161,12 @@ float RateControl::updateIstaAxis(const float x, const float h, const float lamb
 		return 0.f;
 	}
 
+	float x_eff = x;
+	if (_ista_epsilon > 0.f) {
+		const float abs_x = fabsf(x);
+		x_eff = (abs_x > 0.f) ? (x * abs_x / (abs_x + _ista_epsilon)) : 0.f;
+	}
+
 	const float lambda1_safe = math::max(lambda1, 0.f);
 	const float lambda2_safe = math::max(lambda2, 0.f);
 
@@ -167,7 +178,7 @@ float RateControl::updateIstaAxis(const float x, const float h, const float lamb
 	}
 
 	const float a = h * lambda1_safe;
-	const float b_k = -x - h * nu;
+	const float b_k = -x_eff - h * nu;
 	const float h2_lambda2 = h * h * lambda2_safe;
 
 	float u = 0.f;
@@ -199,7 +210,7 @@ float RateControl::updateIstaAxis(const float x, const float h, const float lamb
 		u = lambda1_safe * sqrt_x_tilde_safe + nu_next;
 
 	} else {
-		u = -x / h;
+		u = -x_eff / h;
 		if (update_state) {
 			nu = u;
 		}

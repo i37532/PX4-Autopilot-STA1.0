@@ -102,6 +102,11 @@ public:
 	void setIstaEnabled(bool enabled);
 
 	/**
+	 * Set ISTA boundary layer width (smooth sign), 0 disables smoothing.
+	 */
+	void setIstaEpsilon(float epsilon);
+
+	/**
 	 * Set the integral term to 0 to prevent windup
 	 * @see _rate_int
 	 */
@@ -140,6 +145,7 @@ private:
 	// States
 	matrix::Vector3f _rate_int; ///< PID integral term or ISTA internal state (nu)
 	bool _ista_enabled{false};
+	float _ista_epsilon{0.f};
 
 	// Feedback from control allocation
 	matrix::Vector<bool, 3> _control_allocator_saturation_negative;

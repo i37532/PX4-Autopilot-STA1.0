@@ -49,6 +49,20 @@
 PARAM_DEFINE_INT32(MC_RATE_ISTA_EN, 0);
 
 /**
+ * ISTA boundary layer width (smooth sign)
+ *
+ * Replaces hard switching with a smoothed transition around zero to reduce chattering.
+ * Set to 0 to disable smoothing.
+ *
+ * @min 0.0
+ * @max 1.0
+ * @decimal 3
+ * @increment 0.001
+ * @group Multicopter Rate Control
+ */
+PARAM_DEFINE_FLOAT(MC_RATE_ISTA_EPS, 0.02f);
+
+/**
  * Roll rate P gain
  *
  * Roll rate proportional gain, i.e. control output for angular speed error 1 rad/s.
