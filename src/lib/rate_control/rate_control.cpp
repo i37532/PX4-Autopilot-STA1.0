@@ -81,6 +81,16 @@ void RateControl::setIstaEpsilon(float epsilon)
 	_ista_epsilon = math::max(epsilon, 0.f);
 }
 
+void RateControl::setIstaDeadband(float deadband)
+{
+	_ista_deadband = math::max(deadband, 0.f);
+}
+
+void RateControl::setIstaNuTimeConstant(float time_constant)
+{
+	_ista_nu_tc = math::max(time_constant, 0.f);
+}
+
 Vector3f RateControl::update(const Vector3f &rate, const Vector3f &rate_sp, const Vector3f &angular_accel,
 			     const float dt, const bool landed)
 {
@@ -100,6 +110,17 @@ Vector3f RateControl::update(const Vector3f &rate, const Vector3f &rate_sp, cons
 			const bool inhibit_update = (saturated_positive && rate_error(i) > 0.f)
 						    || (saturated_negative && rate_error(i) < 0.f);
 			const bool update_state = !landed && !inhibit_update;
+
+			if (_ista_deadband > 0.f
+			    && fabsf(rate_sp(i)) < _ista_deadband
+			    && fabsf(rate_error(i)) < _ista_deadband) {
+				if (update_state && _ista_nu_tc > 0.f) {
+					const float decay = math::constrain(dt / _ista_nu_tc, 0.f, 1.f);
+					_rate_int(i) -= _rate_int(i) * decay;
+				}
+
+				continue;
+			}
 
 			const float u = updateIstaAxis(-rate_error(i), dt, _gain_p(i), _gain_i(i), _rate_int(i), update_state);
 

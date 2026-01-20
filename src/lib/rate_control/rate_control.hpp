@@ -107,6 +107,16 @@ public:
 	void setIstaEpsilon(float epsilon);
 
 	/**
+	 * Set ISTA deadband on rate error (rad/s), 0 disables deadband.
+	 */
+	void setIstaDeadband(float deadband);
+
+	/**
+	 * Set ISTA nu decay time constant (s), 0 disables decay.
+	 */
+	void setIstaNuTimeConstant(float time_constant);
+
+	/**
 	 * Set the integral term to 0 to prevent windup
 	 * @see _rate_int
 	 */
@@ -146,6 +156,8 @@ private:
 	matrix::Vector3f _rate_int; ///< PID integral term or ISTA internal state (nu)
 	bool _ista_enabled{false};
 	float _ista_epsilon{0.f};
+	float _ista_deadband{0.f};
+	float _ista_nu_tc{0.f};
 
 	// Feedback from control allocation
 	matrix::Vector<bool, 3> _control_allocator_saturation_negative;

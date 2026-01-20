@@ -82,6 +82,8 @@ MulticopterRateControl::parameters_updated()
 
 	_rate_control.setIstaEnabled(_param_mc_rate_ista_en.get() > 0);
 	_rate_control.setIstaEpsilon(_param_mc_rate_ista_eps.get());
+	_rate_control.setIstaDeadband(_param_mc_rate_ista_db.get());
+	_rate_control.setIstaNuTimeConstant(_param_mc_rate_ista_tc.get());
 
 	_rate_control.setPidGains(
 		rate_k.emult(Vector3f(_param_mc_rollrate_p.get(), _param_mc_pitchrate_p.get(), _param_mc_yawrate_p.get())),

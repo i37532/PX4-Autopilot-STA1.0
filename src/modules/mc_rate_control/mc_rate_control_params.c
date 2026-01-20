@@ -54,6 +54,7 @@ PARAM_DEFINE_INT32(MC_RATE_ISTA_EN, 0);
  * Replaces hard switching with a smoothed transition around zero to reduce chattering.
  * Set to 0 to disable smoothing.
  *
+ * @unit rad/s
  * @min 0.0
  * @max 1.0
  * @decimal 3
@@ -61,6 +62,35 @@ PARAM_DEFINE_INT32(MC_RATE_ISTA_EN, 0);
  * @group Multicopter Rate Control
  */
 PARAM_DEFINE_FLOAT(MC_RATE_ISTA_EPS, 0.02f);
+
+/**
+ * ISTA rate error deadband
+ *
+ * If both rate setpoint and error are below this value, ISTA output is zeroed
+ * and nu can decay to suppress chattering.
+ *
+ * @unit rad/s
+ * @min 0.0
+ * @max 1.0
+ * @decimal 3
+ * @increment 0.001
+ * @group Multicopter Rate Control
+ */
+PARAM_DEFINE_FLOAT(MC_RATE_ISTA_DB, 0.02f);
+
+/**
+ * ISTA nu decay time constant
+ *
+ * Time constant used to decay nu when inside deadband. Set to 0 to disable decay.
+ *
+ * @unit s
+ * @min 0.0
+ * @max 5.0
+ * @decimal 2
+ * @increment 0.05
+ * @group Multicopter Rate Control
+ */
+PARAM_DEFINE_FLOAT(MC_RATE_ISTA_TC, 0.5f);
 
 /**
  * Roll rate P gain
