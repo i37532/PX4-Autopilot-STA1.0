@@ -64,3 +64,61 @@
 - **抖动明显**：先增大 `MC_RATE_ISTA_EPS`（例如 0.08→0.12），再增大 `MC_RATE_ISTA_DB`（例如 0.03→0.05）。
 - **残余小振荡**：减小 `MC_RATE_ISTA_TC`（例如 0.5→0.3）加快 nu 衰减。
 - **需要抗扰**：在稳定基础上小步增 `MC_ROLLRATE_I/MC_PITCHRATE_I`（例如 0.005→0.02），抖动或漂移出现则回退。
+
+
+
+## Docker + Gazebo Classic 快速启动
+
+### 启动 Docker 环境（带 GUI）
+
+```sh
+xhost +local:docker
+docker run -it --rm --privileged --network host \
+  --env=LOCAL_USER_ID="$(id -u)" \
+  -e DISPLAY=$DISPLAY \
+  -v /tmp/.X11-unix:/tmp/.X11-unix:ro \
+  -v /home/i37/PX4-Autopilot-STA1.0:/src/PX4-Autopilot:rw \
+  px4io/px4-dev-simulation-focal:2022-08-12 bash
+```
+
+### 进入容器后编译并启动 Gazebo Classic
+
+```sh
+cd /src/PX4-Autopilot
+git submodule update --init --recursive
+
+# 使用独立 build 目录避免 CMakeCache 路径冲突
+export PX4_BUILD_DIR=/src/PX4-Autopilot/build-docker
+make px4_sitl_default gazebo-classic
+```
+
+### 修改源码后如何重新编译
+
+源码在宿主机修改后，容器内会自动同步（挂载目录），直接重新编译即可：
+
+```sh
+cd /src/PX4-Autopilot
+export PX4_BUILD_DIR=/src/PX4-Autopilot/build-docker
+make px4_sitl_default gazebo-classic
+```
+
+
+
+## 编译固件
+
+```
+docker run -it --rm --privileged --network host \
+  -v /home/i37/PX4-Autopilot-STA1.0:/src/PX4-Autopilot:rw \
+  px4io/px4-dev-nuttx-focal:2022-08-12 bash
+
+cd /src/PX4-Autopilot
+export PX4_BUILD_DIR=/src/PX4-Autopilot/build-nuttx-docker
+make px4_fmu-v5_default
+```
+
+路径：
+
+```
+build/px4_fmu-v5_default/px4_fmu-v5_default.px4
+```
+
