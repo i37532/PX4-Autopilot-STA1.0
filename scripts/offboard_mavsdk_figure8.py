@@ -10,6 +10,10 @@ from mavsdk.offboard import OffboardError, PositionNedYaw
 SETPOINT_HZ = 20.0
 SETPOINT_DT = 1.0 / SETPOINT_HZ
 
+FIGURE8_DURATION_S = 30.0
+FIGURE8_AMP_NORTH_M = 10.0
+FIGURE8_AMP_EAST_M = 10.0
+
 
 async def run():
     drone = System()
@@ -65,6 +69,19 @@ async def run():
                     break
             await asyncio.sleep(SETPOINT_DT)
 
+    async def fly_figure8(center, duration_s, amp_n, amp_e):
+        start_time = time.time()
+        while True:
+            t = time.time() - start_time
+            if t >= duration_s:
+                break
+            theta = 2.0 * math.pi * t / duration_s
+            north = center.north_m + amp_n * math.sin(theta)
+            east = center.east_m + amp_e * math.sin(2.0 * theta)
+            down = center.down_m
+            await drone.offboard.set_position_ned(PositionNedYaw(north, east, down, yaw))
+            await asyncio.sleep(SETPOINT_DT)
+
     # Send a few setpoints before starting offboard
     initial_sp = PositionNedYaw(start_pos.north_m, start_pos.east_m, start_pos.down_m, yaw)
     for _ in range(int(1.0 / SETPOINT_DT)):
@@ -83,7 +100,6 @@ async def run():
         pos_task.cancel()
         return
 
-    # Takeoff to 10 m
     target_takeoff = PositionNedYaw(start_pos.north_m, start_pos.east_m, -10.0, yaw)
     print("Taking off to 10 m...")
     await goto_position(target_takeoff, timeout_s=30.0, tolerance_m=0.5)
@@ -91,16 +107,13 @@ async def run():
     print("Hover 10 s...")
     await send_setpoint(target_takeoff, 10.0)
 
-    # Move +X (north) 10 m
-    target_move = PositionNedYaw(start_pos.north_m + 10.0, start_pos.east_m, -10.0, yaw)
-    print("Moving +X (north) 10 m...")
-    await goto_position(target_move, timeout_s=30.0, tolerance_m=0.5)
+    print("Flying figure-8 path...")
+    await fly_figure8(target_takeoff, FIGURE8_DURATION_S, FIGURE8_AMP_NORTH_M, FIGURE8_AMP_EAST_M)
 
     print("Hover 15 s...")
-    await send_setpoint(target_move, 15.0)
+    await send_setpoint(target_takeoff, 15.0)
 
-    # Descend near ground
-    target_down = PositionNedYaw(target_move.north_m, target_move.east_m, -0.5, yaw)
+    target_down = PositionNedYaw(target_takeoff.north_m, target_takeoff.east_m, -0.5, yaw)
     print("Descending...")
     await goto_position(target_down, timeout_s=30.0, tolerance_m=0.5)
 

@@ -10,6 +10,9 @@ from mavsdk.offboard import OffboardError, PositionNedYaw
 SETPOINT_HZ = 20.0
 SETPOINT_DT = 1.0 / SETPOINT_HZ
 
+Z_LEG_EAST_M = 10.0
+Z_LEG_NORTH_M = 10.0
+
 
 async def run():
     drone = System()
@@ -91,16 +94,24 @@ async def run():
     print("Hover 10 s...")
     await send_setpoint(target_takeoff, 10.0)
 
-    # Move +X (north) 10 m
-    target_move = PositionNedYaw(start_pos.north_m + 10.0, start_pos.east_m, -10.0, yaw)
-    print("Moving +X (north) 10 m...")
-    await goto_position(target_move, timeout_s=30.0, tolerance_m=0.5)
+    # Z-shaped path in NED plane:
+    # 1) Move east +Z_LEG_EAST_M
+    # 2) Move north +Z_LEG_NORTH_M and east -Z_LEG_EAST_M (diagonal)
+    # 3) Move east +Z_LEG_EAST_M
+    wp1 = PositionNedYaw(start_pos.north_m, start_pos.east_m + Z_LEG_EAST_M, -10.0, yaw)
+    wp2 = PositionNedYaw(start_pos.north_m + Z_LEG_NORTH_M, start_pos.east_m, -10.0, yaw)
+    wp3 = PositionNedYaw(start_pos.north_m + Z_LEG_NORTH_M, start_pos.east_m + Z_LEG_EAST_M, -10.0, yaw)
+
+    print("Flying Z-shaped path...")
+    await goto_position(wp1, timeout_s=30.0, tolerance_m=0.5)
+    await goto_position(wp2, timeout_s=30.0, tolerance_m=0.5)
+    await goto_position(wp3, timeout_s=30.0, tolerance_m=0.5)
 
     print("Hover 15 s...")
-    await send_setpoint(target_move, 15.0)
+    await send_setpoint(wp3, 15.0)
 
     # Descend near ground
-    target_down = PositionNedYaw(target_move.north_m, target_move.east_m, -0.5, yaw)
+    target_down = PositionNedYaw(wp3.north_m, wp3.east_m, -0.5, yaw)
     print("Descending...")
     await goto_position(target_down, timeout_s=30.0, tolerance_m=0.5)
 
