@@ -164,8 +164,15 @@ async def run():
         await smooth_move(pos_tuple(current_pos), target_down, yaw_after_takeoff)
 
         print("Landing...")
-        await drone.action.land()
-        landed = await wait_until_landed(timeout_s=30.0)
+        hold_sp = PositionNedYaw(*target_down, yaw_after_takeoff)
+        hold_task = asyncio.create_task(send_setpoint(hold_sp, 30.0))
+        landed = False
+        try:
+            await drone.action.land()
+            landed = await wait_until_landed(timeout_s=30.0)
+        finally:
+            hold_task.cancel()
+            await asyncio.gather(hold_task, return_exceptions=True)
         if not landed:
             print("Landing not confirmed, stopping offboard anyway...")
 
