@@ -5,10 +5,12 @@ import time
 
 from mavsdk import System
 from mavsdk.offboard import OffboardError, PositionNedYaw
+from mavsdk.telemetry import LandedState
 
 
 SETPOINT_HZ = 20.0
 SETPOINT_DT = 1.0 / SETPOINT_HZ
+YAW_AFTER_TAKEOFF_DEG = None  # Set to a number to rotate after takeoff; None keeps initial yaw.
 
 
 async def run():
@@ -28,6 +30,7 @@ async def run():
             break
 
     current_pos = None
+    current_yaw = None
 
     async def position_listener():
         nonlocal current_pos
@@ -36,27 +39,71 @@ async def run():
 
     pos_task = asyncio.create_task(position_listener())
 
-    while current_pos is None:
+    async def yaw_listener():
+        nonlocal current_yaw
+        async for att in drone.telemetry.attitude_euler():
+            current_yaw = att.yaw_deg
+
+    yaw_task = asyncio.create_task(yaw_listener())
+
+    async def cleanup_tasks():
+        for task in (pos_task, yaw_task):
+            task.cancel()
+        await asyncio.gather(pos_task, yaw_task, return_exceptions=True)
+
+        close = getattr(drone, "close", None)
+        if close is not None:
+            try:
+                result = close()
+                if asyncio.iscoroutine(result):
+                    await result
+            except Exception:
+                pass
+
+        await asyncio.sleep(0.05)
+
+    while current_pos is None or current_yaw is None:
         await asyncio.sleep(0.1)
 
-    async def get_initial_yaw():
-        async for att in drone.telemetry.attitude_euler():
-            return math.radians(att.yaw_deg)
-
-    yaw = await get_initial_yaw()
-    print(f"Using initial yaw: {math.degrees(yaw):.1f} deg")
+    yaw_initial = current_yaw
+    yaw_after_takeoff = yaw_initial if YAW_AFTER_TAKEOFF_DEG is None else YAW_AFTER_TAKEOFF_DEG
+    print(f"Using initial yaw: {yaw_initial:.1f} deg")
+    if YAW_AFTER_TAKEOFF_DEG is not None:
+        print(f"Yaw after takeoff: {YAW_AFTER_TAKEOFF_DEG:.1f} deg")
     start_pos = current_pos
 
-    async def send_setpoint(pos, duration_s):
+    def yaw_now():
+        return current_yaw if current_yaw is not None else yaw_after_takeoff
+
+    async def send_setpoint(pos, duration_s, yaw_fn=None):
         end_time = time.time() + duration_s
         while time.time() < end_time:
-            await drone.offboard.set_position_ned(pos)
+            if yaw_fn is None:
+                await drone.offboard.set_position_ned(pos)
+            else:
+                await drone.offboard.set_position_ned(
+                    PositionNedYaw(pos.north_m, pos.east_m, pos.down_m, yaw_fn())
+                )
             await asyncio.sleep(SETPOINT_DT)
 
-    async def goto_position(target, timeout_s=30.0, tolerance_m=0.3):
+    async def wait_until_landed(timeout_s=30.0):
+        end_time = time.time() + timeout_s
+        async for state in drone.telemetry.landed_state():
+            if state == LandedState.ON_GROUND:
+                return True
+            if time.time() > end_time:
+                return False
+        return False
+
+    async def goto_position(target, timeout_s=30.0, tolerance_m=0.3, yaw_fn=None):
         end_time = time.time() + timeout_s
         while time.time() < end_time:
-            await drone.offboard.set_position_ned(target)
+            if yaw_fn is None:
+                await drone.offboard.set_position_ned(target)
+            else:
+                await drone.offboard.set_position_ned(
+                    PositionNedYaw(target.north_m, target.east_m, target.down_m, yaw_fn())
+                )
             if current_pos is not None:
                 dx = target.north_m - current_pos.north_m
                 dy = target.east_m - current_pos.east_m
@@ -66,9 +113,10 @@ async def run():
             await asyncio.sleep(SETPOINT_DT)
 
     # Send a few setpoints before starting offboard
-    initial_sp = PositionNedYaw(start_pos.north_m, start_pos.east_m, start_pos.down_m, yaw)
     for _ in range(int(1.0 / SETPOINT_DT)):
-        await drone.offboard.set_position_ned(initial_sp)
+        await drone.offboard.set_position_ned(
+            PositionNedYaw(start_pos.north_m, start_pos.east_m, start_pos.down_m, yaw_now())
+        )
         await asyncio.sleep(SETPOINT_DT)
 
     print("Arming...")
@@ -80,19 +128,19 @@ async def run():
     except OffboardError as exc:
         print(f"Offboard start failed: {exc._result.result}")
         await drone.action.disarm()
-        pos_task.cancel()
+        await cleanup_tasks()
         return
 
     # Takeoff to 10 m
-    target_takeoff = PositionNedYaw(start_pos.north_m, start_pos.east_m, -10.0, yaw)
+    target_takeoff = PositionNedYaw(start_pos.north_m, start_pos.east_m, -10.0, yaw_after_takeoff)
     print("Taking off to 10 m...")
-    await goto_position(target_takeoff, timeout_s=30.0, tolerance_m=0.5)
+    await goto_position(target_takeoff, timeout_s=30.0, tolerance_m=0.5, yaw_fn=yaw_now)
 
     print("Hover 10 s...")
     await send_setpoint(target_takeoff, 10.0)
 
     # Move +X (north) 10 m
-    target_move = PositionNedYaw(start_pos.north_m + 10.0, start_pos.east_m, -10.0, yaw)
+    target_move = PositionNedYaw(start_pos.north_m + 10.0, start_pos.east_m, -10.0, yaw_after_takeoff)
     print("Moving +X (north) 10 m...")
     await goto_position(target_move, timeout_s=30.0, tolerance_m=0.5)
 
@@ -100,15 +148,23 @@ async def run():
     await send_setpoint(target_move, 15.0)
 
     # Descend near ground
-    target_down = PositionNedYaw(target_move.north_m, target_move.east_m, -0.5, yaw)
+    target_down = PositionNedYaw(target_move.north_m, target_move.east_m, -0.5, yaw_after_takeoff)
     print("Descending...")
     await goto_position(target_down, timeout_s=30.0, tolerance_m=0.5)
 
-    print("Stopping offboard and landing...")
-    await drone.offboard.stop()
+    print("Landing...")
     await drone.action.land()
+    landed = await wait_until_landed(timeout_s=30.0)
+    if not landed:
+        print("Landing not confirmed, stopping offboard anyway...")
 
-    pos_task.cancel()
+    print("Stopping offboard...")
+    try:
+        await drone.offboard.stop()
+    except OffboardError as exc:
+        print(f"Offboard stop failed: {exc._result.result}")
+
+    await cleanup_tasks()
 
 
 if __name__ == "__main__":

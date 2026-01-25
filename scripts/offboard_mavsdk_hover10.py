@@ -11,17 +11,10 @@ from mavsdk.telemetry import LandedState
 SETPOINT_HZ = 20.0
 SETPOINT_DT = 1.0 / SETPOINT_HZ
 
-MAX_VEL_MPS = 1.0
-MIN_SEG_TIME_S = 2.0
+TAKEOFF_ALT_M = 10.0
+HOVER_TIME_S = 10.0
+DESCEND_ALT_M = 0.5
 YAW_AFTER_TAKEOFF_DEG = None  # Set to a number to rotate after takeoff; None keeps initial yaw.
-
-Z_LEG_EAST_M = 10.0
-Z_LEG_NORTH_M = 10.0
-
-
-def _quintic_blend(t: float) -> float:
-    # 0..1 -> 0..1 with zero vel/acc at endpoints
-    return 10.0 * t ** 3 - 15.0 * t ** 4 + 6.0 * t ** 5
 
 
 async def run():
@@ -81,6 +74,7 @@ async def run():
     print(f"Using initial yaw: {yaw_initial:.1f} deg")
     if YAW_AFTER_TAKEOFF_DEG is not None:
         print(f"Yaw after takeoff: {YAW_AFTER_TAKEOFF_DEG:.1f} deg")
+    start_pos = current_pos
 
     def yaw_now():
         return current_yaw if current_yaw is not None else yaw_after_takeoff
@@ -105,28 +99,24 @@ async def run():
                 return False
         return False
 
-    async def smooth_move(start, target, yaw_sp, max_vel=MAX_VEL_MPS, min_duration=MIN_SEG_TIME_S, yaw_fn=None):
-        dx = target[0] - start[0]
-        dy = target[1] - start[1]
-        dz = target[2] - start[2]
-        dist = math.sqrt(dx * dx + dy * dy + dz * dz)
-        duration = max(min_duration, dist / max_vel if max_vel > 0.0 else min_duration)
-        steps = max(1, int(duration / SETPOINT_DT))
-        for i in range(steps + 1):
-            t = i / steps
-            s = _quintic_blend(t)
-            north = start[0] + s * dx
-            east = start[1] + s * dy
-            down = start[2] + s * dz
-            yaw_cmd = yaw_fn() if yaw_fn is not None else yaw_sp
-            await drone.offboard.set_position_ned(PositionNedYaw(north, east, down, yaw_cmd))
+    async def goto_position(target, timeout_s=30.0, tolerance_m=0.3, yaw_fn=None):
+        end_time = time.time() + timeout_s
+        while time.time() < end_time:
+            if yaw_fn is None:
+                await drone.offboard.set_position_ned(target)
+            else:
+                await drone.offboard.set_position_ned(
+                    PositionNedYaw(target.north_m, target.east_m, target.down_m, yaw_fn())
+                )
+            if current_pos is not None:
+                dx = target.north_m - current_pos.north_m
+                dy = target.east_m - current_pos.east_m
+                dz = target.down_m - current_pos.down_m
+                if math.sqrt(dx * dx + dy * dy + dz * dz) <= tolerance_m:
+                    break
             await asyncio.sleep(SETPOINT_DT)
 
-    def pos_tuple(pos):
-        return (pos.north_m, pos.east_m, pos.down_m)
-
     # Send a few setpoints before starting offboard
-    start_pos = current_pos
     for _ in range(int(1.0 / SETPOINT_DT)):
         await drone.offboard.set_position_ned(
             PositionNedYaw(start_pos.north_m, start_pos.east_m, start_pos.down_m, yaw_now())
@@ -146,34 +136,17 @@ async def run():
         return
 
     # Takeoff to 10 m
-    target_takeoff = (start_pos.north_m, start_pos.east_m, -10.0)
-    print("Taking off to 10 m (smooth)...")
-    await smooth_move(pos_tuple(current_pos), target_takeoff, yaw_after_takeoff, yaw_fn=yaw_now)
+    target_takeoff = PositionNedYaw(start_pos.north_m, start_pos.east_m, -TAKEOFF_ALT_M, yaw_after_takeoff)
+    print("Taking off to 10 m...")
+    await goto_position(target_takeoff, timeout_s=30.0, tolerance_m=0.5, yaw_fn=yaw_now)
 
     print("Hover 10 s...")
-    await send_setpoint(PositionNedYaw(*target_takeoff, yaw_after_takeoff), 10.0)
-
-    # Z-shaped path in NED plane:
-    # 1) Move east +Z_LEG_EAST_M
-    # 2) Move north +Z_LEG_NORTH_M and east -Z_LEG_EAST_M (diagonal)
-    # 3) Move east +Z_LEG_EAST_M
-    base = target_takeoff
-    wp1 = (base[0], base[1] + Z_LEG_EAST_M, base[2])
-    wp2 = (base[0] + Z_LEG_NORTH_M, base[1], base[2])
-    wp3 = (base[0] + Z_LEG_NORTH_M, base[1] + Z_LEG_EAST_M, base[2])
-
-    print("Flying Z-shaped path (smooth)...")
-    await smooth_move(pos_tuple(current_pos), wp1, yaw_after_takeoff)
-    await smooth_move(pos_tuple(current_pos), wp2, yaw_after_takeoff)
-    await smooth_move(pos_tuple(current_pos), wp3, yaw_after_takeoff)
-
-    print("Hover 15 s...")
-    await send_setpoint(PositionNedYaw(*wp3, yaw_after_takeoff), 15.0)
+    await send_setpoint(target_takeoff, HOVER_TIME_S)
 
     # Descend near ground
-    target_down = (wp3[0], wp3[1], -0.5)
-    print("Descending (smooth)...")
-    await smooth_move(pos_tuple(current_pos), target_down, yaw_after_takeoff)
+    target_down = PositionNedYaw(target_takeoff.north_m, target_takeoff.east_m, -DESCEND_ALT_M, yaw_after_takeoff)
+    print("Descending...")
+    await goto_position(target_down, timeout_s=30.0, tolerance_m=0.5)
 
     print("Landing...")
     await drone.action.land()

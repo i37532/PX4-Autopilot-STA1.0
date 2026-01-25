@@ -13,10 +13,11 @@ SETPOINT_DT = 1.0 / SETPOINT_HZ
 
 MAX_VEL_MPS = 1.0
 MIN_SEG_TIME_S = 2.0
-YAW_AFTER_TAKEOFF_DEG = None  # Set to a number to rotate after takeoff; None keeps initial yaw.
 
-Z_LEG_EAST_M = 10.0
-Z_LEG_NORTH_M = 10.0
+TAKEOFF_ALT_M = 10.0
+HOVER_TIME_S = 10.0
+DESCEND_ALT_M = 0.5
+YAW_AFTER_TAKEOFF_DEG = None  # Set to a number to rotate after takeoff; None keeps initial yaw.
 
 
 def _quintic_blend(t: float) -> float:
@@ -146,32 +147,15 @@ async def run():
         return
 
     # Takeoff to 10 m
-    target_takeoff = (start_pos.north_m, start_pos.east_m, -10.0)
+    target_takeoff = (start_pos.north_m, start_pos.east_m, -TAKEOFF_ALT_M)
     print("Taking off to 10 m (smooth)...")
     await smooth_move(pos_tuple(current_pos), target_takeoff, yaw_after_takeoff, yaw_fn=yaw_now)
 
     print("Hover 10 s...")
-    await send_setpoint(PositionNedYaw(*target_takeoff, yaw_after_takeoff), 10.0)
-
-    # Z-shaped path in NED plane:
-    # 1) Move east +Z_LEG_EAST_M
-    # 2) Move north +Z_LEG_NORTH_M and east -Z_LEG_EAST_M (diagonal)
-    # 3) Move east +Z_LEG_EAST_M
-    base = target_takeoff
-    wp1 = (base[0], base[1] + Z_LEG_EAST_M, base[2])
-    wp2 = (base[0] + Z_LEG_NORTH_M, base[1], base[2])
-    wp3 = (base[0] + Z_LEG_NORTH_M, base[1] + Z_LEG_EAST_M, base[2])
-
-    print("Flying Z-shaped path (smooth)...")
-    await smooth_move(pos_tuple(current_pos), wp1, yaw_after_takeoff)
-    await smooth_move(pos_tuple(current_pos), wp2, yaw_after_takeoff)
-    await smooth_move(pos_tuple(current_pos), wp3, yaw_after_takeoff)
-
-    print("Hover 15 s...")
-    await send_setpoint(PositionNedYaw(*wp3, yaw_after_takeoff), 15.0)
+    await send_setpoint(PositionNedYaw(*target_takeoff, yaw_after_takeoff), HOVER_TIME_S)
 
     # Descend near ground
-    target_down = (wp3[0], wp3[1], -0.5)
+    target_down = (target_takeoff[0], target_takeoff[1], -DESCEND_ALT_M)
     print("Descending (smooth)...")
     await smooth_move(pos_tuple(current_pos), target_down, yaw_after_takeoff)
 
