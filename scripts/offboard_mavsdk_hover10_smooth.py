@@ -14,7 +14,7 @@ SETPOINT_DT = 1.0 / SETPOINT_HZ
 MAX_VEL_MPS = 1.0
 MIN_SEG_TIME_S = 2.0
 
-TAKEOFF_ALT_M = 10.0
+TAKEOFF_ALT_M = 5.0
 HOVER_TIME_S = 10.0
 DESCEND_ALT_M = 0.5
 YAW_AFTER_TAKEOFF_DEG = None  # Set to a number to rotate after takeoff; None keeps initial yaw.
@@ -28,6 +28,7 @@ def _quintic_blend(t: float) -> float:
 async def run():
     drone = System()
     await drone.connect(system_address="udp://:14540")
+    # await drone.connect(system_address="serial:///dev/ttyUSB0:57600")
 
     print("Waiting for vehicle connection...")
     async for state in drone.core.connection_state():
@@ -146,9 +147,9 @@ async def run():
         await cleanup_tasks()
         return
 
-    # Takeoff to 10 m
+    # Takeoff to 5 m
     target_takeoff = (start_pos.north_m, start_pos.east_m, -TAKEOFF_ALT_M)
-    print("Taking off to 10 m (smooth)...")
+    print("Taking off to 5 m (smooth)...")
     await smooth_move(pos_tuple(current_pos), target_takeoff, yaw_after_takeoff, yaw_fn=yaw_now)
 
     print("Hover 10 s...")

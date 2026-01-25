@@ -131,17 +131,17 @@ async def run():
         await cleanup_tasks()
         return
 
-    # Takeoff to 10 m
-    target_takeoff = PositionNedYaw(start_pos.north_m, start_pos.east_m, -10.0, yaw_after_takeoff)
-    print("Taking off to 10 m...")
+    # Takeoff to 5 m
+    target_takeoff = PositionNedYaw(start_pos.north_m, start_pos.east_m, -5.0, yaw_after_takeoff)
+    print("Taking off to 5 m...")
     await goto_position(target_takeoff, timeout_s=30.0, tolerance_m=0.5, yaw_fn=yaw_now)
 
     print("Hover 10 s...")
     await send_setpoint(target_takeoff, 10.0)
 
-    # Move +X (north) 10 m
-    target_move = PositionNedYaw(start_pos.north_m + 10.0, start_pos.east_m, -10.0, yaw_after_takeoff)
-    print("Moving +X (north) 10 m...")
+    # Move +X (north) 5 m
+    target_move = PositionNedYaw(start_pos.north_m + 5.0, start_pos.east_m, -5.0, yaw_after_takeoff)
+    print("Moving +X (north) 5 m...")
     await goto_position(target_move, timeout_s=30.0, tolerance_m=0.5)
 
     print("Hover 15 s...")

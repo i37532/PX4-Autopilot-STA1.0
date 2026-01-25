@@ -16,8 +16,8 @@ MIN_SEG_TIME_S = 2.0
 YAW_AFTER_TAKEOFF_DEG = None  # Set to a number to rotate after takeoff; None keeps initial yaw.
 
 FIGURE8_DURATION_S = 40.0
-FIGURE8_AMP_NORTH_M = 10.0
-FIGURE8_AMP_EAST_M = 10.0
+FIGURE8_AMP_NORTH_M = 5.0
+FIGURE8_AMP_EAST_M = 5.0
 FIGURE8_RAMP_S = 5.0
 
 
@@ -168,8 +168,8 @@ async def run():
         await cleanup_tasks()
         return
 
-    target_takeoff = (start_pos.north_m, start_pos.east_m, -10.0)
-    print("Taking off to 10 m (smooth)...")
+    target_takeoff = (start_pos.north_m, start_pos.east_m, -5.0)
+    print("Taking off to 5 m (smooth)...")
     await smooth_move(pos_tuple(current_pos), target_takeoff, yaw_after_takeoff, yaw_fn=yaw_now)
 
     print("Hover 10 s...")

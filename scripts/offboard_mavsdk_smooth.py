@@ -142,17 +142,17 @@ async def run():
             await drone.action.disarm()
             return
 
-        # Takeoff to 10 m
-        target_takeoff = (start_pos.north_m, start_pos.east_m, -10.0)
-        print("Taking off to 10 m (smooth)...")
+        # Takeoff to 5 m
+        target_takeoff = (start_pos.north_m, start_pos.east_m, -5.0)
+        print("Taking off to 5 m (smooth)...")
         await smooth_move(pos_tuple(current_pos), target_takeoff, yaw_after_takeoff, yaw_fn=yaw_now)
 
         print("Hover 10 s...")
         await send_setpoint(PositionNedYaw(*target_takeoff, yaw_after_takeoff), 10.0)
 
-        # Move +X (north) 10 m
-        target_move = (target_takeoff[0] + 10.0, target_takeoff[1], target_takeoff[2])
-        print("Moving +X (north) 10 m (smooth)...")
+        # Move +X (north) 5 m
+        target_move = (target_takeoff[0] + 5.0, target_takeoff[1], target_takeoff[2])
+        print("Moving +X (north) 5 m (smooth)...")
         await smooth_move(pos_tuple(current_pos), target_move, yaw_after_takeoff)
 
         print("Hover 15 s...")

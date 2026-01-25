@@ -12,8 +12,8 @@ SETPOINT_HZ = 20.0
 SETPOINT_DT = 1.0 / SETPOINT_HZ
 YAW_AFTER_TAKEOFF_DEG = None  # Set to a number to rotate after takeoff; None keeps initial yaw.
 
-Z_LEG_EAST_M = 10.0
-Z_LEG_NORTH_M = 10.0
+Z_LEG_EAST_M = 5.0
+Z_LEG_NORTH_M = 5.0
 
 
 async def run():
@@ -134,9 +134,9 @@ async def run():
         await cleanup_tasks()
         return
 
-    # Takeoff to 10 m
-    target_takeoff = PositionNedYaw(start_pos.north_m, start_pos.east_m, -10.0, yaw_after_takeoff)
-    print("Taking off to 10 m...")
+    # Takeoff to 5 m
+    target_takeoff = PositionNedYaw(start_pos.north_m, start_pos.east_m, -5.0, yaw_after_takeoff)
+    print("Taking off to 5 m...")
     await goto_position(target_takeoff, timeout_s=30.0, tolerance_m=0.5, yaw_fn=yaw_now)
 
     print("Hover 10 s...")
@@ -146,9 +146,9 @@ async def run():
     # 1) Move east +Z_LEG_EAST_M
     # 2) Move north +Z_LEG_NORTH_M and east -Z_LEG_EAST_M (diagonal)
     # 3) Move east +Z_LEG_EAST_M
-    wp1 = PositionNedYaw(start_pos.north_m, start_pos.east_m + Z_LEG_EAST_M, -10.0, yaw_after_takeoff)
-    wp2 = PositionNedYaw(start_pos.north_m + Z_LEG_NORTH_M, start_pos.east_m, -10.0, yaw_after_takeoff)
-    wp3 = PositionNedYaw(start_pos.north_m + Z_LEG_NORTH_M, start_pos.east_m + Z_LEG_EAST_M, -10.0,
+    wp1 = PositionNedYaw(start_pos.north_m, start_pos.east_m + Z_LEG_EAST_M, -5.0, yaw_after_takeoff)
+    wp2 = PositionNedYaw(start_pos.north_m + Z_LEG_NORTH_M, start_pos.east_m, -5.0, yaw_after_takeoff)
+    wp3 = PositionNedYaw(start_pos.north_m + Z_LEG_NORTH_M, start_pos.east_m + Z_LEG_EAST_M, -5.0,
                          yaw_after_takeoff)
 
     print("Flying Z-shaped path...")

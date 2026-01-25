@@ -11,7 +11,7 @@ from mavsdk.telemetry import LandedState
 SETPOINT_HZ = 20.0
 SETPOINT_DT = 1.0 / SETPOINT_HZ
 
-TAKEOFF_ALT_M = 10.0
+TAKEOFF_ALT_M = 5.0
 HOVER_TIME_S = 10.0
 DESCEND_ALT_M = 0.5
 YAW_AFTER_TAKEOFF_DEG = None  # Set to a number to rotate after takeoff; None keeps initial yaw.
@@ -19,7 +19,9 @@ YAW_AFTER_TAKEOFF_DEG = None  # Set to a number to rotate after takeoff; None ke
 
 async def run():
     drone = System()
-    await drone.connect(system_address="udp://:14540")
+    # await drone.connect(system_address="udp://:14540")
+    await drone.connect(system_address="serial:///dev/ttyUSB0:57600")
+
 
     print("Waiting for vehicle connection...")
     async for state in drone.core.connection_state():
@@ -135,9 +137,9 @@ async def run():
         await cleanup_tasks()
         return
 
-    # Takeoff to 10 m
+    # Takeoff to 5 m
     target_takeoff = PositionNedYaw(start_pos.north_m, start_pos.east_m, -TAKEOFF_ALT_M, yaw_after_takeoff)
-    print("Taking off to 10 m...")
+    print("Taking off to 5 m...")
     await goto_position(target_takeoff, timeout_s=30.0, tolerance_m=0.5, yaw_fn=yaw_now)
 
     print("Hover 10 s...")

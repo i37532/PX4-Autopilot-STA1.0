@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-LAUNCH_DELAY_S=${LAUNCH_DELAY_S:-30}
+LAUNCH_DELAY_S=${LAUNCH_DELAY_S:-15}
 OFFBOARD_SCRIPT=${OFFBOARD_SCRIPT:-scripts/offboard_mavsdk_hover10_smooth.py}
 LOG_FILE=${LOG_FILE:-"$ROOT_DIR/offboard_mavsdk_hover10_smooth.log"}
 

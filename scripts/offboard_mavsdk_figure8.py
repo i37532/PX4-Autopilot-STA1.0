@@ -13,8 +13,8 @@ SETPOINT_DT = 1.0 / SETPOINT_HZ
 YAW_AFTER_TAKEOFF_DEG = None  # Set to a number to rotate after takeoff; None keeps initial yaw.
 
 FIGURE8_DURATION_S = 30.0
-FIGURE8_AMP_NORTH_M = 10.0
-FIGURE8_AMP_EAST_M = 10.0
+FIGURE8_AMP_NORTH_M = 5.0
+FIGURE8_AMP_EAST_M = 5.0
 
 
 async def run():
@@ -148,8 +148,8 @@ async def run():
         await cleanup_tasks()
         return
 
-    target_takeoff = PositionNedYaw(start_pos.north_m, start_pos.east_m, -10.0, yaw_after_takeoff)
-    print("Taking off to 10 m...")
+    target_takeoff = PositionNedYaw(start_pos.north_m, start_pos.east_m, -5.0, yaw_after_takeoff)
+    print("Taking off to 5 m...")
     await goto_position(target_takeoff, timeout_s=30.0, tolerance_m=0.5, yaw_fn=yaw_now)
 
     print("Hover 10 s...")
